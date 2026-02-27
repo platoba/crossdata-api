@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S4 跨境数据API - Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
+    .fade-in { animation: fadeIn 0.3s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="app">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b">
+      <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">S4</div>
+          <h1 class="text-xl font-semibold text-gray-900">跨境数据API</h1>
+          <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">MVP</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <span id="health-badge" class="text-xs px-2 py-1 rounded-full bg-gray-100">检查中...</span>
+          <a href="/api/docs" target="_blank" class="text-sm text-blue-600 hover:underline">API文档</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Tabs -->
+    <div class="max-w-7xl mx-auto px-4 mt-4">
+      <nav class="flex gap-6 border-b">
+        <button onclick="switchTab('dashboard')" id="tab-dashboard" class="pb-2 text-sm font-medium tab-active">📊 概览</button>
+        <button onclick="switchTab('keys')" id="tab-keys" class="pb-2 text-sm font-medium text-gray-500 hover:text-gray-700">🔑 API Keys</button>
+        <button onclick="switchTab('playground')" id="tab-playground" class="pb-2 text-sm font-medium text-gray-500 hover:text-gray-700">🧪 测试</button>
+        <button onclick="switchTab('docs')" id="tab-docs" class="pb-2 text-sm font-medium text-gray-500 hover:text-gray-700">📖 文档</button>
+      </nav>
+    </div>
+
+    <!-- Dashboard Tab -->
+    <div id="panel-dashboard" class="max-w-7xl mx-auto px-4 py-6 fade-in">
+      <!-- Admin Login -->
+      <div id="admin-login" class="mb-6 bg-white rounded-lg shadow p-4">
+        <div class="flex items-center gap-3">
+          <input type="password" id="admin-key-input" placeholder="输入 Admin Key" class="flex-1 border rounded px-3 py-2 text-sm">
+          <input type="email" id="admin-email-input" placeholder="用户邮箱" class="flex-1 border rounded px-3 py-2 text-sm">
+          <button onclick="loadDashboard()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">加载</button>
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow p-4">
+          <div class="text-sm text-gray-500">今日请求</div>
+          <div id="stat-today" class="text-2xl font-bold text-gray-900 mt-1">-</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <div class="text-sm text-gray-500">日限额</div>
+          <div id="stat-limit" class="text-2xl font-bold text-gray-900 mt-1">-</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <div class="text-sm text-gray-500">套餐</div>
+          <div id="stat-plan" class="text-2xl font-bold text-gray-900 mt-1">-</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <div class="text-sm text-gray-500">API Keys</div>
+          <div id="stat-keys" class="text-2xl font-bold text-gray-900 mt-1">-</div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <h3 class="text-sm font-medium text-gray-700 mb-3">7天请求趋势</h3>
+        <canvas id="usage-chart" height="200"></canvas>
+      </div>
+
+      <!-- Endpoint Breakdown -->
+      <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="text-sm font-medium text-gray-700 mb-3">端点调用分布</h3>
+        <div id="endpoint-list" class="space-y-2 text-sm text-gray-600">暂无数据</div>
+      </div>
+    </div>
+
+    <!-- Keys Tab -->
+    <div id="panel-keys" class="max-w-7xl mx-auto px-4 py-6 hidden fade-in">
+      <div class="bg-white rounded-lg shadow p-4 mb-4">
+        <h3 class="text-sm font-medium text-gray-700 mb-3">生成新 API Key</h3>
+        <div class="flex gap-3">
+          <input type="email" id="new-key-email" placeholder="用户邮箱" class="flex-1 border rounded px-3 py-2 text-sm">
+          <select id="new-key-plan" class="border rounded px-3 py-2 text-sm">
+            <option value="free">Free (100/天)</option>
+            <option value="pro">Pro (5000/天)</option>
+            <option value="enterprise">Enterprise (50000/天)</option>
+          </select>
+          <button onclick="createKey()" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700">生成</button>
+        </div>
+        <div id="new-key-result" class="mt-3 hidden">
+          <div class="bg-green-50 border border-green-200 rounded p-3">
+            <div class="text-xs text-green-600 mb-1">新 API Key (请妥善保存):</div>
+            <code id="new-key-value" class="text-sm font-mono text-green-800 select-all"></code>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="text-sm font-medium text-gray-700 mb-3">已有 API Keys</h3>
+        <div id="keys-list" class="space-y-2">
+          <div class="text-sm text-gray-400">请先在概览页输入Admin Key和邮箱</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Playground Tab -->
+    <div id="panel-playground" class="max-w-7xl mx-auto px-4 py-6 hidden fade-in">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="text-sm font-medium text-gray-700 mb-3">API 测试</h3>
+          <div class="space-y-3">
+            <input type="text" id="test-api-key" placeholder="X-API-Key" class="w-full border rounded px-3 py-2 text-sm font-mono">
+            <select id="test-endpoint" onchange="updateTestBody()" class="w-full border rounded px-3 py-2 text-sm">
+              <option value="product/lookup">POST /api/product/lookup</option>
+              <option value="product/price-history">POST /api/product/price-history</option>
+              <option value="keyword/search">POST /api/keyword/search</option>
+              <option value="keyword/suggest">POST /api/keyword/suggest</option>
+              <option value="competitor/monitor">POST /api/competitor/monitor</option>
+            </select>
+            <textarea id="test-body" rows="5" class="w-full border rounded px-3 py-2 text-sm font-mono">{"asin": "B0D1XD1ZV3"}</textarea>
+            <button onclick="runTest()" class="w-full bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">发送请求</button>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="text-sm font-medium text-gray-700 mb-3">响应</h3>
+          <pre id="test-response" class="bg-gray-900 text-green-400 rounded p-3 text-xs overflow-auto max-h-96 font-mono">等待请求...</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Docs Tab -->
+    <div id="panel-docs" class="max-w-7xl mx-auto px-4 py-6 hidden fade-in">
+      <div class="bg-white rounded-lg shadow p-6 prose max-w-none">
+        <h2 class="text-lg font-semibold mb-4">S4 跨境数据API 文档</h2>
+
+        <div class="space-y-6">
+          <div>
+            <h3 class="text-md font-medium text-gray-800">认证</h3>
+            <p class="text-sm text-gray-600 mt-1">所有API请求需要在Header中携带 <code class="bg-gray-100 px-1 rounded">X-API-Key</code></p>
+            <pre class="bg-gray-900 text-green-400 rounded p-3 text-xs mt-2">curl -X POST https://api.example.com/api/product/lookup \
+  -H "X-API-Key: s4_free_xxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"asin": "B0D1XD1ZV3"}'</pre>
+          </div>
+
+          <div>
+            <h3 class="text-md font-medium text-gray-800">套餐限制</h3>
+            <table class="w-full text-sm mt-2">
+              <thead><tr class="bg-gray-50"><th class="text-left p-2">套餐</th><th class="text-left p-2">日限额</th><th class="text-left p-2">价格</th></tr></thead>
+              <tbody>
+                <tr class="border-t"><td class="p-2">Free</td><td class="p-2">100次/天</td><td class="p-2">免费</td></tr>
+                <tr class="border-t"><td class="p-2">Starter</td><td class="p-2">5,000次/天</td><td class="p-2">¥99/月</td></tr>
+                <tr class="border-t"><td class="p-2">Pro</td><td class="p-2">50,000次/天</td><td class="p-2">¥299/月</td></tr>
+                <tr class="border-t"><td class="p-2">Enterprise</td><td class="p-2">无限</td><td class="p-2">¥999/月</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <h3 class="text-md font-medium text-gray-800">端点列表</h3>
+            <div class="space-y-4 mt-2">
+              <div class="border rounded p-3">
+                <div class="flex items-center gap-2">
+                  <span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded">POST</span>
+                  <code class="text-sm">/api/product/lookup</code>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">查询商品信息。输入ASIN或商品URL，返回标题、价格、评分、图片、卖家等。</p>
+                <pre class="bg-gray-50 rounded p-2 text-xs mt-2">Body: { "asin": "B0D1XD1ZV3" } 或 { "url": "https://amazon.com/dp/B0D1XD1ZV3" }</pre>
+              </div>
+
+              <div class="border rounded p-3">
+                <div class="flex items-center gap-2">
+                  <span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded">POST</span>
+                  <code class="text-sm">/api/product/price-history</code>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">获取商品价格历史。默认返回30天价格走势。</p>
+                <pre class="bg-gray-50 rounded p-2 text-xs mt-2">Body: { "asin": "B0D1XD1ZV3", "days": 30 }</pre>
+              </div>
+
+              <div class="border rounded p-3">
+                <div class="flex items-center gap-2">
+                  <span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded">POST</span>
+                  <code class="text-sm">/api/keyword/search</code>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">关键词搜索商品。返回Top 20结果。</p>
+                <pre class="bg-gray-50 rounded p-2 text-xs mt-2">Body: { "keyword": "wireless earbuds", "platform": "amazon" }</pre>
+              </div>
+
+              <div class="border rounded p-3">
+                <div class="flex items-center gap-2">
+                  <span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded">POST</span>
+                  <code class="text-sm">/api/keyword/suggest</code>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">关键词建议。输入种子词，返回相关长尾词。</p>
+                <pre class="bg-gray-50 rounded p-2 text-xs mt-2">Body: { "seed": "bluetooth speaker", "platform": "amazon" }</pre>
+              </div>
+
+              <div class="border rounded p-3">
+                <div class="flex items-center gap-2">
+                  <span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded">POST</span>
+                  <code class="text-sm">/api/competitor/monitor</code>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">添加竞品监控任务。</p>
+                <pre class="bg-gray-50 rounded p-2 text-xs mt-2">Body: { "productId": "B0D1XD1ZV3", "platform": "amazon", "alertOn": ["price_change"] }</pre>
+              </div>
+
+              <div class="border rounded p-3">
+                <div class="flex items-center gap-2">
+                  <span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">GET</span>
+                  <code class="text-sm">/api/competitor/alerts</code>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">获取竞品变动提醒。</p>
+                <pre class="bg-gray-50 rounded p-2 text-xs mt-2">Query: ?limit=50&unread=true</pre>
+              </div>
+
+              <div class="border rounded p-3">
+                <div class="flex items-center gap-2">
+                  <span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">GET</span>
+                  <code class="text-sm">/api/usage</code>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">获取API用量统计。</p>
+              </div>
+
+              <div class="border rounded p-3">
+                <div class="flex items-center gap-2">
+                  <span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">GET</span>
+                  <code class="text-sm">/api/health</code>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">健康检查（无需认证）。</p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-md font-medium text-gray-800">错误码</h3>
+            <table class="w-full text-sm mt-2">
+              <thead><tr class="bg-gray-50"><th class="text-left p-2">状态码</th><th class="text-left p-2">说明</th></tr></thead>
+              <tbody>
+                <tr class="border-t"><td class="p-2">401</td><td class="p-2">缺少或无效的API Key</td></tr>
+                <tr class="border-t"><td class="p-2">429</td><td class="p-2">超出日请求限额</td></tr>
+                <tr class="border-t"><td class="p-2">400</td><td class="p-2">请求参数错误</td></tr>
+                <tr class="border-t"><td class="p-2">500</td><td class="p-2">服务器内部错误</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let adminKey = '';
+    let adminEmail = '';
+    let usageChart = null;
+
+    // Tab switching
+    function switchTab(tab) {
+      document.querySelectorAll('[id^="panel-"]').forEach(p => p.classList.add('hidden'));
+      document.querySelectorAll('[id^="tab-"]').forEach(t => { t.classList.remove('tab-active'); t.classList.add('text-gray-500'); });
+      document.getElementById(`panel-${tab}`).classList.remove('hidden');
+      const tabEl = document.getElementById(`tab-${tab}`);
+      tabEl.classList.add('tab-active');
+      tabEl.classList.remove('text-gray-500');
+    }
+
+    // Health check
+    async function checkHealth() {
+      try {
+        const resp = await fetch('/api/health');
+        const data = await resp.json();
+        const badge = document.getElementById('health-badge');
+        if (data.services.database && data.services.redis) {
+          badge.textContent = '● 全部正常';
+          badge.className = 'text-xs px-2 py-1 rounded-full bg-green-100 text-green-700';
+        } else {
+          badge.textContent = '● 部分异常';
+          badge.className = 'text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-700';
+        }
+      } catch {
+        const badge = document.getElementById('health-badge');
+        badge.textContent = '● 离线';
+        badge.className = 'text-xs px-2 py-1 rounded-full bg-red-100 text-red-700';
+      }
+    }
+
+    // Load dashboard
+    async function loadDashboard() {
+      adminKey = document.getElementById('admin-key-input').value;
+      adminEmail = document.getElementById('admin-email-input').value;
+      if (!adminKey || !adminEmail) return alert('请输入Admin Key和邮箱');
+
+      // Load keys
+      try {
+        const resp = await fetch(`/api/admin/keys?email=${encodeURIComponent(adminEmail)}`, {
+          headers: { 'X-Admin-Key': adminKey }
+        });
+        const data = await resp.json();
+        if (!data.success) return alert(data.error);
+
+        document.getElementById('stat-keys').textContent = data.data.length;
+        renderKeys(data.data);
+
+        // If has keys, load usage for first key
+        if (data.data.length > 0) {
+          const key = data.data[0];
+          const usageResp = await fetch('/api/usage', { headers: { 'X-API-Key': key.key } });
+          const usageData = await usageResp.json();
+          if (usageData.success) {
+            document.getElementById('stat-today').textContent = usageData.data.todayUsage;
+            document.getElementById('stat-limit').textContent = usageData.data.dailyLimit;
+            document.getElementById('stat-plan').textContent = usageData.data.plan.toUpperCase();
+            renderChart(usageData.data.weeklyBreakdown);
+            renderEndpoints(usageData.data.endpointBreakdown);
+          }
+        }
+      } catch (err) {
+        alert('加载失败: ' + err.message);
+      }
+    }
+
+    function renderKeys(keys) {
+      const container = document.getElementById('keys-list');
+      if (keys.length === 0) {
+        container.innerHTML = '<div class="text-sm text-gray-400">暂无API Key</div>';
+        return;
+      }
+      container.innerHTML = keys.map(k => `
+        <div class="flex items-center justify-between border rounded p-3">
+          <div>
+            <code class="text-sm font-mono">${k.key.slice(0, 20)}...${k.key.slice(-8)}</code>
+            <div class="text-xs text-gray-400 mt-1">${k.plan} · ${k.daily_limit}/天 · ${new Date(k.created_at).toLocaleDateString()}</div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="copyKey('${k.key}')" class="text-xs text-blue-600 hover:underline">复制</button>
+            <button onclick="deleteKey(${k.id})" class="text-xs text-red-600 hover:underline">删除</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderChart(data) {
+      const ctx = document.getElementById('usage-chart').getContext('2d');
+      if (usageChart) usageChart.destroy();
+      usageChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.map(d => d.date?.slice(5) || ''),
+          datasets: [{
+            label: '请求数',
+            data: data.map(d => d.count),
+            backgroundColor: 'rgba(59, 130, 246, 0.5)',
+            borderColor: 'rgb(59, 130, 246)',
+            borderWidth: 1,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+      });
+    }
+
+    function renderEndpoints(data) {
+      const container = document.getElementById('endpoint-list');
+      if (data.length === 0) {
+        container.innerHTML = '暂无数据';
+        return;
+      }
+      const total = data.reduce((s, d) => s + d.count, 0);
+      container.innerHTML = data.map(d => {
+        const pct = ((d.count / total) * 100).toFixed(1);
+        return `
+          <div class="flex items-center gap-3">
+            <code class="text-xs w-48 truncate">${d.endpoint}</code>
+            <div class="flex-1 bg-gray-100 rounded-full h-2">
+              <div class="bg-blue-500 h-2 rounded-full" style="width: ${pct}%"></div>
+            </div>
+            <span class="text-xs text-gray-500 w-16 text-right">${d.count} (${pct}%)</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Create key
+    async function createKey() {
+      const email = document.getElementById('new-key-email').value || adminEmail;
+      const plan = document.getElementById('new-key-plan').value;
+      if (!email) return alert('请输入邮箱');
+      if (!adminKey) return alert('请先在概览页输入Admin Key');
+
+      const resp = await fetch('/api/admin/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+        body: JSON.stringify({ email, plan })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        document.getElementById('new-key-value').textContent = data.data.key;
+        document.getElementById('new-key-result').classList.remove('hidden');
+        loadDashboard();
+      } else {
+        alert(data.error);
+      }
+    }
+
+    function copyKey(key) {
+      navigator.clipboard.writeText(key).then(() => alert('已复制'));
+    }
+
+    async function deleteKey(id) {
+      if (!confirm('确定删除此API Key?')) return;
+      await fetch(`/api/admin/keys/${id}?email=${encodeURIComponent(adminEmail)}`, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Key': adminKey }
+      });
+      loadDashboard();
+    }
+
+    // Playground
+    const testBodies = {
+      'product/lookup': '{"asin": "B0D1XD1ZV3"}',
+      'product/price-history': '{"asin": "B0D1XD1ZV3", "days": 30}',
+      'keyword/search': '{"keyword": "wireless earbuds", "platform": "amazon"}',
+      'keyword/suggest': '{"seed": "bluetooth speaker", "platform": "amazon"}',
+      'competitor/monitor': '{"productId": "B0D1XD1ZV3", "platform": "amazon"}',
+    };
+
+    function updateTestBody() {
+      const endpoint = document.getElementById('test-endpoint').value;
+      document.getElementById('test-body').value = testBodies[endpoint] || '{}';
+    }
+
+    async function runTest() {
+      const apiKey = document.getElementById('test-api-key').value;
+      const endpoint = document.getElementById('test-endpoint').value;
+      const body = document.getElementById('test-body').value;
+      const responseEl = document.getElementById('test-response');
+
+      if (!apiKey) return alert('请输入API Key');
+
+      responseEl.textContent = '请求中...';
+
+      try {
+        const resp = await fetch(`/api/${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+          body
+        });
+        const data = await resp.json();
+        responseEl.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        responseEl.textContent = `Error: ${err.message}`;
+      }
+    }
+
+    // Init
+    checkHealth();
+    setInterval(checkHealth, 30000);
+  </script>
+</body>
+</html>

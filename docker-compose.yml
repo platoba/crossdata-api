@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: s4-data-api
+    ports:
+      - "3500:3500"
+    environment:
+      - PORT=3500
+      - HOST=0.0.0.0
+      - DB_HOST=43.160.251.119
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=s4_data_api
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ADMIN_KEY=${ADMIN_KEY:-s4_admin_default}
+      - HTTP_PROXY=${HTTP_PROXY:-}
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: s4-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  redis_data:
